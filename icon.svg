@@ -1,0 +1,16 @@
+<svg viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffd75a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ff8c1a;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" fill="#0c0812"/>
+  <rect x="12" y="12" width="168" height="168" rx="40" fill="url(#grad)"/>
+  <rect x="20" y="20" width="152" height="152" rx="36" fill="#0c0812"/>
+  <text x="96" y="75" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#ffd75a" text-anchor="middle" dominant-baseline="middle">PUÑO</text>
+  <text x="96" y="120" font-family="Arial, sans-serif" font-size="32" fill="#ff8c1a" text-anchor="middle" dominant-baseline="middle">3D</text>
+  <circle cx="60" cy="50" r="6" fill="#7fc24a" opacity="0.8"/>
+  <circle cx="130" cy="160" r="8" fill="#59d7ff" opacity="0.8"/>
+  <circle cx="150" cy="55" r="5" fill="#ff9ec4" opacity="0.8"/>
+</svg>

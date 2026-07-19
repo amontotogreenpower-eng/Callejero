@@ -1,0 +1,62 @@
+{
+  "name": "PUÑO CALLEJERO 3D",
+  "short_name": "PUÑO",
+  "description": "Juego de lucha arcade 3D con 8 personajes únicos. Torneo, Rey de Mesa, modo versus.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "theme_color": "#0c0812",
+  "background_color": "#0c0812",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshot-540x720.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "screenshot-1920x1080.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
+  "categories": ["games"],
+  "shortcuts": [
+    {
+      "name": "Torneo",
+      "short_name": "Torneo",
+      "description": "Inicia un torneo de 8 luchadores",
+      "url": "/?mode=torneo",
+      "icons": [{"src": "icon-192.png", "sizes": "192x192"}]
+    },
+    {
+      "name": "Rey de Mesa",
+      "short_name": "Rey",
+      "description": "Modo rey de mesa: derrota retadores seguidos",
+      "url": "/?mode=king",
+      "icons": [{"src": "icon-192.png", "sizes": "192x192"}]
+    }
+  ]
+}
