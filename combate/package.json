@@ -1,0 +1,14 @@
+{
+  "name": "combate-mocap",
+  "version": "1.0.0",
+  "description": "Juego de lucha 3D con esqueleto Mixamo y captura de movimiento MediaPipe",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node tests/animacion.test.mjs && node tests/combate.test.mjs"
+  },
+  "devDependencies": {
+    "three": "0.170.0"
+  }
+}
