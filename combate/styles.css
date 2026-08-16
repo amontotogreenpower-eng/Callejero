@@ -1,0 +1,136 @@
+:root{
+  --amarillo:#ffd75a;
+  --rojo:#ff4d5e;
+  --azul:#4dd2ff;
+  --verde:#39e6a8;
+  --fondo:#0b0a14;
+  --panel:rgba(14,12,26,.82);
+}
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--fondo);color:#f2eefb;
+  font-family:"Segoe UI",Roboto,system-ui,sans-serif;touch-action:none;overscroll-behavior:none}
+
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+/* ---------------- HUD ---------------- */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:3}
+
+.bars{display:flex;align-items:flex-start;gap:14px;padding:14px 18px}
+.side{flex:1;min-width:0}
+.side.right{text-align:right}
+.name{font:700 14px/1.1 "Segoe UI",sans-serif;letter-spacing:.14em;
+  text-shadow:0 2px 6px #000;margin-bottom:5px}
+
+.bar{position:relative;height:20px;border:2px solid rgba(255,255,255,.55);
+  border-radius:4px;background:rgba(0,0,0,.55);overflow:hidden;
+  box-shadow:0 3px 14px rgba(0,0,0,.5)}
+.bar .ghost,.bar .fill{position:absolute;top:0;bottom:0;left:0;width:100%}
+.side.right .bar .ghost,.side.right .bar .fill{left:auto;right:0}
+.bar .ghost{background:rgba(255,255,255,.35);transition:width .12s linear}
+.bar .fill{transition:width .09s linear}
+.bar .fill.a{background:linear-gradient(180deg,#ff8a6a,var(--rojo))}
+.bar .fill.b{background:linear-gradient(180deg,#8ae7ff,var(--azul))}
+
+.pips{display:flex;gap:6px;margin-top:6px}
+.side.right .pips{justify-content:flex-end}
+.pips i{width:13px;height:13px;border:2px solid rgba(255,255,255,.5);
+  border-radius:50%;display:block}
+.pips i.on{background:var(--amarillo);border-color:var(--amarillo);
+  box-shadow:0 0 10px rgba(255,215,90,.8)}
+
+.clock{width:96px;text-align:center;flex:0 0 auto}
+.clock #timer{font:800 42px/1 "Courier New",monospace;color:var(--amarillo);
+  text-shadow:0 3px 12px rgba(0,0,0,.8)}
+.clock .lbl{font-size:10px;letter-spacing:.24em;opacity:.65;margin-top:2px}
+
+.center{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%) scale(.9);
+  font:800 34px/1.1 "Segoe UI",sans-serif;letter-spacing:.12em;text-align:center;
+  color:var(--amarillo);text-shadow:0 0 26px rgba(255,215,90,.55),0 4px 16px #000;
+  opacity:0;transition:opacity .18s,transform .18s;pointer-events:none;white-space:nowrap}
+.center.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.center.big{font-size:52px}
+
+.combo{position:fixed;left:50%;top:24%;transform:translateX(-50%);
+  font:800 22px/1 "Segoe UI",sans-serif;letter-spacing:.16em;color:#fff;
+  text-shadow:0 0 18px rgba(255,77,94,.9),0 3px 10px #000;
+  opacity:0;transition:opacity .15s}
+.combo.show{opacity:1}
+
+/* ---------------- Panel de captura ---------------- */
+.panel{position:fixed;left:12px;bottom:12px;z-index:5;width:200px;padding:8px;
+  background:var(--panel);border:1px solid rgba(255,255,255,.14);border-radius:12px;
+  backdrop-filter:blur(6px);font-size:11px}
+.panel.hidden{display:none}
+#preview{width:100%;height:auto;border-radius:8px;background:#08070f;display:block}
+.pline{display:flex;justify-content:space-between;gap:6px;margin-top:5px;opacity:.9}
+.pline b{color:var(--verde);font-weight:600}
+.pline span{text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow{display:flex;gap:6px;margin-top:7px}
+
+button.mini{flex:1;padding:5px 6px;font-size:10.5px;border-radius:7px;cursor:pointer;
+  color:#f2eefb;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.22)}
+button.mini:hover{background:rgba(255,255,255,.18)}
+
+/* ---------------- Controles tactiles ---------------- */
+#touch{position:fixed;inset:0;z-index:4;pointer-events:none;display:none}
+@media (pointer:coarse){#touch{display:block}}
+#touch .pad{position:fixed;left:14px;bottom:14px;display:flex;gap:8px;pointer-events:auto}
+#touch .acts{position:fixed;right:14px;bottom:14px;display:grid;
+  grid-template-columns:repeat(3,auto);gap:8px;pointer-events:auto}
+.tbtn{width:13vmin;height:13vmin;min-width:48px;min-height:48px;
+  display:flex;align-items:center;justify-content:center;
+  font:700 3.4vmin/1 "Segoe UI",sans-serif;color:var(--amarillo);
+  background:rgba(12,8,24,.5);border:2px solid rgba(255,215,90,.75);
+  border-radius:14px;backdrop-filter:blur(2px);opacity:.9;user-select:none;touch-action:none}
+.tbtn.round{border-radius:50%}
+.tbtn:active{background:rgba(255,215,90,.42);color:#fff}
+
+/* ---------------- Menu ---------------- */
+.menu{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;
+  padding:20px;background:radial-gradient(120% 100% at 50% 0,#191333 0%,#07060e 70%);
+  overflow:auto}
+.menu.hidden{display:none}
+.card{width:min(760px,100%);padding:26px 28px;border-radius:18px;
+  background:rgba(12,10,24,.86);border:1px solid rgba(255,255,255,.13);
+  box-shadow:0 24px 70px rgba(0,0,0,.6)}
+
+h1{font:800 40px/1 "Segoe UI",sans-serif;letter-spacing:.06em}
+h1 span{color:var(--amarillo)}
+.sub{margin:10px 0 18px;opacity:.75;font-size:14px;line-height:1.5;max-width:52ch}
+
+.opts{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:18px;font-size:13px}
+.opts label{display:flex;align-items:center;gap:8px;opacity:.9}
+.opts select{padding:6px 10px;border-radius:8px;background:#181430;color:#f2eefb;
+  border:1px solid rgba(255,255,255,.2);font-size:13px}
+.opts .check{cursor:pointer}
+
+.btns{display:flex;flex-wrap:wrap;gap:12px}
+.btns button{flex:1 1 200px;padding:14px 18px;font:700 15px/1 "Segoe UI",sans-serif;
+  letter-spacing:.06em;border-radius:12px;cursor:pointer;border:2px solid transparent;
+  color:#12101f;transition:transform .1s,filter .15s}
+.btns button:hover{transform:translateY(-2px);filter:brightness(1.08)}
+.btns .primary{background:var(--amarillo)}
+.btns .accent{background:var(--verde)}
+
+.help{margin-top:20px;font-size:13px}
+.help summary{cursor:pointer;opacity:.85;padding:6px 0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:10px}
+.help h3{font-size:12px;letter-spacing:.16em;color:var(--amarillo);margin:12px 0 6px}
+.help ul{list-style:none;display:grid;gap:5px;opacity:.85;line-height:1.45}
+.help li::before{content:"› ";color:var(--verde)}
+.tip{margin-top:12px;opacity:.72;line-height:1.5;font-size:12px}
+.tip input[type=file]{display:block;margin-top:8px;font-size:11px;max-width:100%}
+
+kbd{display:inline-block;padding:1px 6px;border-radius:5px;font:600 11px/1.6 "Courier New",monospace;
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.24)}
+.foot{margin-top:18px;opacity:.5;font-size:12px}
+
+@media (max-width:640px){
+  h1{font-size:30px}
+  .clock{width:70px}
+  .clock #timer{font-size:30px}
+  .center{font-size:26px}
+  .center.big{font-size:36px}
+  .panel{width:150px}
+}

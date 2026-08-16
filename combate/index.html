@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>COMBATE MOCAP — lucha con esqueleto Mixamo y MediaPipe</title>
+<meta name="theme-color" content="#0b0a14">
+<link rel="stylesheet" href="styles.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="gl"></canvas>
+
+<!-- ---------------- HUD ---------------- -->
+<div id="hud">
+  <div class="bars">
+    <div class="side left">
+      <div class="name" id="nameA">ROJO</div>
+      <div class="bar"><div class="ghost" id="hpAghost"></div><div class="fill a" id="hpA"></div></div>
+      <div class="pips" id="pipsA"></div>
+    </div>
+
+    <div class="clock">
+      <div id="timer">60</div>
+      <div class="lbl">TIEMPO</div>
+    </div>
+
+    <div class="side right">
+      <div class="name" id="nameB">AZUL</div>
+      <div class="bar"><div class="ghost" id="hpBghost"></div><div class="fill b" id="hpB"></div></div>
+      <div class="pips" id="pipsB"></div>
+    </div>
+  </div>
+
+  <div id="combo" class="combo"></div>
+  <div id="center" class="center"></div>
+</div>
+
+<!-- ---------------- Panel de captura ---------------- -->
+<div id="panel" class="panel hidden">
+  <canvas id="preview" width="192" height="144"></canvas>
+  <div class="pline"><b>Captura</b> <span id="mocapStatus">—</span></div>
+  <div class="pline"><b>Gesto</b> <span id="gesture">—</span></div>
+  <div class="prow">
+    <button id="btnCal" class="mini">Calibrar postura</button>
+    <button id="btnMirror" class="mini">Espejo: OFF</button>
+  </div>
+</div>
+
+<!-- ---------------- Controles tactiles ---------------- -->
+<div id="touch">
+  <div class="pad">
+    <button class="tbtn" data-action="left">◀</button>
+    <button class="tbtn" data-action="crouch">▼</button>
+    <button class="tbtn" data-action="right">▶</button>
+  </div>
+  <div class="acts">
+    <button class="tbtn round" data-action="jab">J</button>
+    <button class="tbtn round" data-action="cross">D</button>
+    <button class="tbtn round" data-action="hook">G</button>
+    <button class="tbtn round" data-action="lowKick">P↓</button>
+    <button class="tbtn round" data-action="highKick">P↑</button>
+    <button class="tbtn round" data-action="block">■</button>
+  </div>
+</div>
+
+<!-- ---------------- Menu ---------------- -->
+<div id="menu" class="menu">
+  <div class="card">
+    <h1>COMBATE <span>MOCAP</span></h1>
+    <p class="sub">Dos luchadores sobre esqueleto Mixamo. Pelea con el teclado
+       o mueve tu cuerpo delante de la camara.</p>
+
+    <div class="opts">
+      <label>Dificultad
+        <select id="diff">
+          <option value="facil">Facil</option>
+          <option value="normal" selected>Normal</option>
+          <option value="duro">Duro</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="twoPlayers"> Dos jugadores (mismo teclado)</label>
+    </div>
+
+    <div class="btns">
+      <button id="btnPlay" class="primary">Jugar con teclado</button>
+      <button id="btnCam" class="accent">Jugar con camara</button>
+    </div>
+
+    <details class="help">
+      <summary>Controles y gestos</summary>
+      <div class="cols">
+        <div>
+          <h3>Jugador 1</h3>
+          <ul>
+            <li><kbd>A</kbd>/<kbd>D</kbd> moverse · <kbd>W</kbd> saltar · <kbd>S</kbd> agacharse</li>
+            <li><kbd>Espacio</kbd> bloquear</li>
+            <li><kbd>J</kbd> jab · <kbd>K</kbd> directo · <kbd>L</kbd> gancho</li>
+            <li><kbd>U</kbd> patada baja · <kbd>I</kbd> patada alta · <kbd>O</kbd> ascendente</li>
+          </ul>
+          <h3>Jugador 2</h3>
+          <ul>
+            <li><kbd>←</kbd>/<kbd>→</kbd> moverse · <kbd>↑</kbd> saltar · <kbd>↓</kbd> agacharse</li>
+            <li><kbd>0</kbd> bloquear · <kbd>1</kbd>–<kbd>6</kbd> golpes (teclado numerico)</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Gestos con camara</h3>
+          <ul>
+            <li>Puño al frente → jab o directo (segun la fuerza)</li>
+            <li>Puño lateral → gancho · de abajo arriba → ascendente</li>
+            <li>Rodilla o pie al frente → patada baja / alta</li>
+            <li>Manos junto a la cara → guardia</li>
+            <li>Agacharte → cubrirte · saltar → salto</li>
+            <li>Desplazarte a un lado → avanzar o retroceder</li>
+          </ul>
+          <p class="tip">Colocate a 2–3 m de la camara, cuerpo entero visible,
+             y pulsa <b>Calibrar postura</b> de pie y relajado.</p>
+        </div>
+      </div>
+      <p class="tip">
+        <b>Personaje propio:</b> carga un GLB descargado de Mixamo
+        (formato glTF, con skin) para sustituir al luchador 1.
+        <input type="file" id="glb" accept=".glb,.gltf">
+        <button id="btnFlip" class="mini">Girar 180°</button>
+      </p>
+    </details>
+
+    <p class="foot"><kbd>Esc</kbd> menu · <kbd>R</kbd> reiniciar ronda</p>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
