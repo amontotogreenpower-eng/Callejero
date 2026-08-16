@@ -11,7 +11,7 @@ import { Retargeter } from './retarget.js';
 import { GestureReader } from './gestures.js';
 import { HUD } from './hud.js';
 import { Audio } from './audio.js';
-import { loadMixamoCharacter } from './rig.js';
+import { loadMixamoCharacter, flipRig } from './rig.js';
 
 const ROUND_TIME = 60;
 const ROUNDS_TO_WIN = 2;
@@ -42,7 +42,7 @@ p1.poseSource = () => retarget.apply();
 
 const game = {
   mode: 'cpu',          // 'cpu' | 'local'
-  state: 'menu',        // menu | intro | fight | roundEnd | matchEnd
+  state: 'menu',        // menu | preview | intro | fight | roundEnd | matchEnd
   timer: ROUND_TIME,
   phase: 0,
   round: 1,
@@ -161,12 +161,11 @@ function frame(now) {
     p1.mocapActive = false;
   }
 
-  if (game.state === 'fight' || game.state === 'intro' || game.state === 'roundEnd' || game.state === 'matchEnd') {
-    step(dt, gcmd);
-  }
+  if (game.state !== 'menu') step(dt, gcmd);
 
   for (const f of [p1, p2]) f.setColorPulse();
-  stage.update(dt, p1, p2);
+  if (game.state === 'preview') stage.focus(dt, p1);
+  else stage.update(dt, p1, p2);
   hud.update(dt, p1, p2, game.timer);
   stage.render();
 }
@@ -179,6 +178,19 @@ function step(dt, gcmd) {
   }
 
   game.phase += dt;
+
+  // Vista previa: el luchador 1 solo, para ver el personaje y probar la
+  // captura de movimiento sin pelear.
+  if (game.state === 'preview') {
+    const kb = in1.read(dt);
+    const cmd = gcmd ? mergeCmd(kb, gcmd) : kb;
+    p1.pos.x = 0;
+    p1.facing = 1;
+    p1.update(dt, cmd, null);
+    p1.pos.x = 0;
+    p1.syncTransform();
+    return;
+  }
 
   if (game.state === 'intro') {
     if (game.phase > 1.1) { game.state = 'fight'; hud.message('¡PELEA!', 0.8, 'big'); }
@@ -241,12 +253,47 @@ function mergeCmd(kb, g) {
 const menu = document.getElementById('menu');
 const panel = document.getElementById('panel');
 const touch = document.getElementById('touch');
+const previewBar = document.getElementById('previewBar');
+const charInfo = document.getElementById('charInfo');
 in1.bindTouch(touch);
+
+const hudEl = document.getElementById('hud');
 
 function showMenu() {
   game.state = 'menu';
   menu.classList.remove('hidden');
+  previewBar.classList.add('hidden');
+  hudEl.classList.remove('oculto');
+  p2.group.visible = true;
   hud.clearMessage();
+}
+
+/** Modo escaparate: un solo luchador, para verlo y ajustar la captura. */
+function enterPreview(msg) {
+  game.state = 'preview';
+  game.phase = 0;
+  menu.classList.add('hidden');
+  previewBar.classList.remove('hidden');
+  hudEl.classList.add('oculto');   // las barras de vida no pintan nada aqui
+  panel.classList.toggle('hidden', !mocap.running);
+  p2.group.visible = false;
+  p1.reset(0, 1);
+  hud.clearMessage();
+  if (msg) hud.message(msg, 2.0);
+}
+
+/** Arranca la camara y deja el panel listo. Devuelve si lo consiguio. */
+async function startCamera() {
+  if (mocap.running) return true;
+  panel.classList.remove('hidden');
+  hud.mocap('iniciando camara…', '—');
+  const ok = await mocap.start();
+  if (!ok) {
+    const causa = mocap.error && mocap.error.message ? mocap.error.message : 'no disponible';
+    hud.message('No se pudo abrir la camara: ' + causa, 3.4);
+    panel.classList.add('hidden');
+  }
+  return ok;
 }
 
 async function launch(useMocap) {
@@ -254,47 +301,71 @@ async function launch(useMocap) {
   const diff = document.getElementById('diff').value;
   const mode = document.getElementById('twoPlayers').checked ? 'local' : 'cpu';
 
-  if (useMocap && !mocap.running) {
-    hud.mocap('iniciando camara…', '—');
-    const ok = await mocap.start();
-    if (!ok) {
-      hud.message('Sin camara: se juega con teclado', 2.2);
-      useMocap = false;
-    }
+  if (useMocap) {
+    const ok = await startCamera();
+    if (!ok) { hud.message('Se juega con teclado', 2.0); useMocap = false; }
   }
+  game.useMocap = useMocap;
   panel.classList.toggle('hidden', !useMocap);
   menu.classList.add('hidden');
+  previewBar.classList.add('hidden');
+  hudEl.classList.remove('oculto');
+  p2.group.visible = true;
   startMatch(mode, diff, useMocap);
 }
 
 document.getElementById('btnPlay').addEventListener('click', () => launch(false));
 document.getElementById('btnCam').addEventListener('click', () => launch(true));
+
+// Probar la camara sin pelear: se ve el personaje copiando tus movimientos.
+document.getElementById('btnTestCam').addEventListener('click', async () => {
+  audio.resume();
+  const ok = await startCamera();
+  game.useMocap = ok;
+  enterPreview(ok ? 'Muevete: el luchador te copia' : 'Vista previa sin camara');
+});
+
+document.getElementById('btnPreview').addEventListener('click', () => {
+  audio.resume();
+  enterPreview('Vista previa del personaje');
+});
+document.getElementById('btnBack').addEventListener('click', showMenu);
+
 document.getElementById('btnCal').addEventListener('click', () => {
   if (retarget.valid) { gestures.calibrate(retarget.metrics); hud.message('Postura calibrada', 1.0); }
-  else hud.message('No te veo: sitúate ante la camara', 1.4);
+  else hud.message('No te veo: situate ante la camara de cuerpo entero', 1.8);
 });
 document.getElementById('btnMirror').addEventListener('click', (e) => {
   retarget.sx *= -1;
   e.target.textContent = 'Espejo: ' + (retarget.sx < 0 ? 'ON' : 'OFF');
 });
 
-document.getElementById('btnFlip').addEventListener('click', () => {
-  const obj = p1.rig.object || p1.rig.root;
-  obj.rotation.y += Math.PI;
-});
+for (const id of ['btnFlip', 'btnFlip2']) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', () => {
+    const target = game.state === 'preview' ? p1 : p1;
+    if (!target.rig.object) { hud.message('El muñeco de serie ya mira bien', 1.6); return; }
+    flipRig(target.rig);
+    hud.message('Personaje girado 180°', 1.2);
+  });
+}
 
-document.getElementById('glb').addEventListener('change', async (e) => {
+const fileInput = document.getElementById('glb');
+fileInput.addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
   const url = URL.createObjectURL(file);
+  charInfo.textContent = 'Cargando ' + file.name + '…';
   try {
-    hud.message('Cargando personaje…', 1.5);
-    const rig = await loadMixamoCharacter(url, 1.75);
+    const rig = await loadMixamoCharacter(url, 1.75, ext);
     swapRig(p1, rig);
-    hud.message('Personaje Mixamo cargado', 1.6);
+    charInfo.textContent = `${file.name} · ${rig.names.length} huesos reconocidos`;
+    enterPreview('Personaje cargado');
   } catch (err) {
     console.error(err);
-    hud.message('GLB no valido: ' + err.message, 2.4);
+    charInfo.textContent = 'Error: ' + err.message;
+    hud.message('No se pudo cargar: ' + err.message, 4.0);
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -328,6 +399,10 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 resize();
+
+// Acceso desde la consola del navegador, util para trastear y depurar.
+window.combate = { game, p1, p2, stage, hud, mocap, gestures, audio, ai,
+  get retarget() { return retarget; } };
 
 hud.setRounds(0, 0, ROUNDS_TO_WIN);
 requestAnimationFrame(frame);

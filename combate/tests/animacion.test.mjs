@@ -2,7 +2,7 @@
 // Ejecutar con:  npm test   (desde la carpeta combate/)
 
 import * as THREE from 'three';
-import { buildSkeleton, computeRestState } from '../src/rig.js';
+import { buildSkeleton, computeRestState, canonicalBone, orientRig } from '../src/rig.js';
 import { Animator } from '../src/animator.js';
 import { CLIPS } from '../src/clips.js';
 import { MOVES } from '../src/moves.js';
@@ -86,6 +86,67 @@ for (const [name, exp] of Object.entries(ALCANCE)) {
   if (exp.minY) ok(p.y >= exp.minY, `${name}: golpea alto (y>=${exp.minY})`, info);
   if (exp.maxY) ok(p.y <= exp.maxY, `${name}: golpea bajo (y<=${exp.maxY})`, info);
   ok(mv.bone === exp.bone, `${name}: la hitbox usa ${exp.bone}`);
+}
+
+// --------------------------------------------------------------- nombres
+console.log('\n== nombres de hueso importados ==');
+// El mismo esqueleto llega escrito de muchas formas segun por donde haya
+// pasado el fichero; todas tienen que reconocerse.
+const NOMBRES = [
+  ['mixamorig:LeftArm', 'LeftArm'],
+  ['mixamorig_LeftArm', 'LeftArm'],       // glTF no admite ':'
+  ['mixamorig1:LeftArm', 'LeftArm'],      // segunda descarga de Mixamo
+  ['mixamorig2_LeftUpLeg', 'LeftUpLeg'],
+  ['Armature|mixamorig:Hips', 'Hips'],
+  ['mixamorig:LeftToe_End', 'LeftToe_End'],
+  ['mixamorigHeadTop_End', 'HeadTop_End'],
+  ['LeftForeArm', 'LeftForeArm'],         // sin prefijo
+  ['Bip01_Spine', null],                  // otro rig: no es Mixamo
+  ['Cube', null],
+];
+for (const [crudo, esperado] of NOMBRES) {
+  ok(canonicalBone(crudo) === esperado,
+    `"${crudo}" -> ${esperado === null ? 'no es hueso Mixamo' : esperado}`,
+    String(canonicalBone(crudo)));
+}
+
+// --------------------------------------------------------------- rig importado
+console.log('\n== esqueleto importado (modelo grabado del reves) ==');
+// Muchos personajes de Mixamo convertidos a glTF vienen mirando a -Z. El juego
+// lo detecta por los pies y lo corrige girando la base; despues los golpes
+// tienen que salir hacia donde mira el personaje, no hacia el lado contrario.
+{
+  const rig2 = buildSkeleton();
+  const contenedor = new THREE.Object3D();
+  contenedor.add(rig2.root);
+  rig2.object = contenedor;
+  rig2.root.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI); // datos al reves
+  contenedor.updateMatrixWorld(true);
+
+  orientRig(rig2, 0);
+  const yawDetectado = rig2.yaw;
+  // orientRig(0) no corrige por si solo: se pide la deteccion como hace el cargador.
+  const pie = rig2.bones.LeftFoot.getWorldPosition(new THREE.Vector3());
+  const dedo = rig2.bones.LeftToeBase.getWorldPosition(new THREE.Vector3());
+  ok(dedo.z - pie.z < 0, 'de partida el modelo mira hacia atras', (dedo.z - pie.z).toFixed(2));
+
+  orientRig(rig2, Math.PI);   // lo que aplica el cargador tras detectarlo
+  contenedor.updateMatrixWorld(true);
+  const pie2 = rig2.bones.LeftFoot.getWorldPosition(new THREE.Vector3());
+  const dedo2 = rig2.bones.LeftToeBase.getWorldPosition(new THREE.Vector3());
+  ok(dedo2.z - pie2.z > 0, 'tras corregir, el personaje mira al frente', (dedo2.z - pie2.z).toFixed(2));
+
+  const anim2 = new Animator(rig2);
+  anim2.play('cross', { fade: 0, restart: true });
+  for (let i = 0; i < 13; i++) anim2.update(0.02);
+  anim2.applyTo(1);
+  contenedor.updateMatrixWorld(true);
+  const mano = rig2.bones.RightHand.getWorldPosition(new THREE.Vector3());
+  const hombro = rig2.bones.RightArm.getWorldPosition(new THREE.Vector3());
+  ok(mano.z - hombro.z > 0.35, 'el directo sale hacia donde mira el personaje',
+    'dz=' + (mano.z - hombro.z).toFixed(2));
+  ok(Math.abs(mano.x) < 0.35, 'y no se va de lado', 'x=' + mano.x.toFixed(2));
+  ok(yawDetectado === 0, 'orientRig guarda el giro aplicado');
 }
 
 // --------------------------------------------------------------- retargeting

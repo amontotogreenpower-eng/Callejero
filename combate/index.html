@@ -56,6 +56,13 @@
   </div>
 </div>
 
+<!-- ---------------- Barra de vista previa ---------------- -->
+<div id="previewBar" class="previewBar hidden">
+  <span class="pvTitle">Vista previa</span>
+  <button id="btnFlip2" class="mini">Girar 180°</button>
+  <button id="btnBack" class="mini primary">Volver al menu</button>
+</div>
+
 <!-- ---------------- Controles tactiles ---------------- -->
 <div id="touch">
   <div class="pad">
@@ -95,6 +102,10 @@
       <button id="btnPlay" class="primary">Jugar con teclado</button>
       <button id="btnCam" class="accent">Jugar con camara</button>
     </div>
+    <div class="btns second">
+      <button id="btnTestCam" class="ghost">Probar camara sin pelear</button>
+      <button id="btnPreview" class="ghost">Ver el personaje</button>
+    </div>
 
     <details class="help">
       <summary>Controles y gestos</summary>
@@ -128,9 +139,13 @@
         </div>
       </div>
       <p class="tip">
-        <b>Personaje propio:</b> carga un GLB descargado de Mixamo
-        (formato glTF, con skin) para sustituir al luchador 1.
-        <input type="file" id="glb" accept=".glb,.gltf">
+        <b>Personaje propio:</b> descarga un personaje de
+        <a href="https://www.mixamo.com" target="_blank" rel="noopener">mixamo.com</a>
+        en <b>FBX</b> (con skin, sin animacion) y cargalo aqui para sustituir al
+        luchador 1. Tambien vale un .glb o .gltf si ya lo has convertido.
+        Al cargarlo se abre la vista previa para verlo.
+        <input type="file" id="glb" accept=".fbx,.glb,.gltf">
+        <span id="charInfo" class="charInfo">Muñeco de serie</span>
         <button id="btnFlip" class="mini">Girar 180°</button>
       </p>
     </details>

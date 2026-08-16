@@ -69,8 +69,8 @@ export class Mocap {
       this.onStatus('Cargando modelo de pose…');
       const vision = await import('@mediapipe/tasks-vision');
       const fileset = await vision.FilesetResolver.forVisionTasks(WASM_BASE);
-      this.landmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' },
+      const opts = (delegate) => ({
+        baseOptions: { modelAssetPath: MODEL_URL, delegate },
         runningMode: 'VIDEO',
         numPoses: 1,
         minPoseDetectionConfidence: 0.5,
@@ -78,6 +78,15 @@ export class Mocap {
         minTrackingConfidence: 0.5,
         outputSegmentationMasks: false,
       });
+      try {
+        this.landmarker = await vision.PoseLandmarker.createFromOptions(fileset, opts('GPU'));
+      } catch (gpuErr) {
+        // En algunos equipos WebGL no esta disponible para el modelo: se
+        // reintenta por CPU antes de rendirse.
+        console.warn('Captura por GPU no disponible, probando CPU:', gpuErr);
+        this.onStatus('GPU no disponible, usando CPU…');
+        this.landmarker = await vision.PoseLandmarker.createFromOptions(fileset, opts('CPU'));
+      }
 
       this.running = true;
       this.onStatus('Captura activa');

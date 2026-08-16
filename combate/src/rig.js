@@ -104,9 +104,11 @@ export function buildSkeleton() {
  * (relativa a la raiz del rig) mas la direccion hacia el hijo principal.
  * Funciona igual para el rig procedural y para uno importado de Mixamo.
  */
-export function computeRestState(rig) {
+export function computeRestState(rig, baseQuat = null) {
   const rest = {};
   const order = topoOrder(rig);
+  const base = baseQuat ? baseQuat.clone() : (rig.baseQuat ? rig.baseQuat.clone() : new THREE.Quaternion());
+  rig.baseQuat = base;
 
   for (const name of order) {
     const bone = rig.bones[name];
@@ -114,9 +116,16 @@ export function computeRestState(rig) {
     const parentName = parentOf(rig, name);
     const parentWorld = parentName && rest[parentName]
       ? rest[parentName].world
-      : new THREE.Quaternion();
+      : base;
 
+    // Rotacion respecto al hueso padre. Si el exportador dejo nodos sueltos
+    // entre medias, se acumulan aqui para que la cadena cuadre.
     const local = bone.quaternion.clone();
+    const stop = parentName ? rig.bones[parentName] : null;
+    for (let n = bone.parent; n && n !== stop && n !== rig.root.parent; n = n.parent) {
+      if (n === bone) break;
+      local.premultiply(n.quaternion);
+    }
     const world = parentWorld.clone().multiply(local);
 
     // Direccion hacia el hijo principal, en espacio local del hueso.
@@ -146,27 +155,66 @@ export function computeRestState(rig) {
 
 function parentOf(rig, name) {
   const bone = rig.bones[name];
-  const p = bone && bone.parent;
-  if (!p) return null;
-  const pn = p.userData && p.userData.mixamo ? p.userData.mixamo : stripPrefix(p.name);
-  return rig.bones[pn] ? pn : null;
+  let p = bone && bone.parent;
+  // Se sube por la jerarquia hasta dar con un hueso conocido: entre dos huesos
+  // puede haber nodos intermedios segun el exportador.
+  while (p) {
+    const pn = p.userData && p.userData.mixamo ? p.userData.mixamo : canonicalBone(p.name);
+    if (pn && rig.bones[pn]) return pn;
+    p = p.parent;
+  }
+  return null;
 }
 
 /** Orden padre-antes-que-hijo, imprescindible para acumular rotaciones. */
 function topoOrder(rig) {
   const out = [];
   const seen = new Set();
-  const visit = (bone) => {
-    const n = bone.userData && bone.userData.mixamo ? bone.userData.mixamo : stripPrefix(bone.name);
-    if (rig.bones[n] && !seen.has(n)) { seen.add(n); out.push(n); }
-    for (const c of bone.children) if (c.isBone) visit(c);
+  const visit = (node) => {
+    const n = node.userData && node.userData.mixamo ? node.userData.mixamo : canonicalBone(node.name);
+    if (n && rig.bones[n] && !seen.has(n)) { seen.add(n); out.push(n); }
+    // Se recorren todos los hijos: algunos exportadores intercalan nodos
+    // normales entre huesos.
+    for (const c of node.children) visit(c);
   };
   visit(rig.root);
   return out;
 }
 
+// Nombres canonicos que sabemos manejar: los del esqueleto propio mas las
+// alternativas de dedos que usan los rigs de Mixamo reales.
+const CANON = new Map();
+{
+  const extra = ['LeftHandIndex1', 'LeftHandMiddle1', 'LeftHandThumb1',
+    'RightHandIndex1', 'RightHandMiddle1', 'RightHandThumb1'];
+  for (const n of BONE_TABLE.map((b) => b[0]).concat(extra)) {
+    CANON.set(n.toLowerCase().replace(/[_\-. ]/g, ''), n);
+  }
+}
+
+/**
+ * Traduce el nombre de un hueso importado al nombre canonico de Mixamo.
+ *
+ * Hace falta porque el mismo esqueleto llega escrito de muchas formas segun
+ * por donde haya pasado el fichero: `mixamorig:LeftArm` (FBX original),
+ * `mixamorig_LeftArm` (los dos puntos no son validos en glTF y los
+ * exportadores los sustituyen), `mixamorig1:LeftArm` (segunda descarga),
+ * `Armature|mixamorig:LeftArm`, o directamente `LeftArm`.
+ *
+ * @returns {string|null} nombre canonico, o null si no es un hueso conocido
+ */
+export function canonicalBone(raw) {
+  if (!raw) return null;
+  const seg = String(raw).split(/[:|/]/).pop();
+  const key = seg.toLowerCase()
+    .replace(/^mixamorig\d*[_\-. ]?/, '')
+    .replace(/[_\-. ]/g, '');
+  return CANON.get(key) || null;
+}
+
+/** @deprecated se mantiene por compatibilidad; usa canonicalBone */
 export function stripPrefix(name) {
-  return String(name).replace(/^mixamorig\d*:?/i, '');
+  return canonicalBone(name) || String(name).replace(/^mixamorig\d*[:_\-. ]?/i, '');
 }
 
 // ---------------------------------------------------------------------------
@@ -257,33 +305,138 @@ export function buildMannequin(rig, palette) {
 // ---------------------------------------------------------------------------
 
 /**
- * @param {string} url  .glb exportado desde Mixamo ("With Skin", formato glTF)
+ * Carga un personaje con esqueleto Mixamo.
+ *
+ * Mixamo entrega FBX (y Collada), no glTF: por eso se aceptan las dos vias.
+ * Un .glb suele venir de haber pasado el FBX por Blender o similar, donde los
+ * dos puntos del nombre (`mixamorig:Hips`) se convierten en otra cosa; de ahi
+ * que los nombres se normalicen con canonicalBone().
+ *
+ * @param {string} url  URL o blob del fichero
  * @param {number} targetHeight altura deseada en metros (se reescala)
+ * @param {string} [format] 'fbx' | 'glb' | 'gltf'. Si falta se deduce de la URL
+ * @returns {Promise<object>} rig con la misma forma que el procedural
  */
-export async function loadMixamoCharacter(url, targetHeight = 1.75) {
-  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
-  const gltf = await new GLTFLoader().loadAsync(url);
-  const scene = gltf.scene;
+export async function loadMixamoCharacter(url, targetHeight = 1.75, format = null) {
+  const ext = (format || url.split('?')[0].split('.').pop() || '').toLowerCase();
 
+  let object;
+  let clips = [];
+  if (ext === 'fbx') {
+    const { FBXLoader } = await import('three/addons/loaders/FBXLoader.js');
+    object = await new FBXLoader().loadAsync(url);
+    clips = object.animations || [];
+  } else if (ext === 'glb' || ext === 'gltf') {
+    const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+    const gltf = await new GLTFLoader().loadAsync(url);
+    object = gltf.scene;
+    clips = gltf.animations || [];
+  } else {
+    throw new Error(`Formato no soportado: .${ext || '?'} (usa .fbx, .glb o .gltf)`);
+  }
+
+  // Huesos por nombre canonico.
   const bones = {};
-  let root = null;
-  scene.traverse((o) => {
+  const vistos = [];
+  object.traverse((o) => {
     if (!o.isBone) return;
-    const n = stripPrefix(o.name);
+    vistos.push(o.name);
+    const n = canonicalBone(o.name);
+    if (!n || bones[n]) return;
     o.userData.mixamo = n;
     bones[n] = o;
   });
-  if (!bones.Hips) throw new Error('El GLB no contiene un esqueleto Mixamo (falta mixamorig:Hips)');
 
-  root = bones.Hips;
-  scene.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) { o.castShadow = true; o.frustumCulled = false; } });
+  if (!bones.Hips) {
+    const pista = vistos.length
+      ? `Huesos encontrados: ${vistos.slice(0, 8).join(', ')}${vistos.length > 8 ? '…' : ''}`
+      : 'El fichero no contiene ningun hueso (¿lo descargaste sin "With Skin"?)';
+    throw new Error(`No reconozco un esqueleto Mixamo. ${pista}`);
+  }
+  const faltan = ['Spine', 'Head', 'LeftArm', 'RightArm', 'LeftUpLeg', 'RightUpLeg']
+    .filter((n) => !bones[n]);
+  if (faltan.length) throw new Error('Al esqueleto le faltan huesos: ' + faltan.join(', '));
 
-  // Escalado: alto real medido por la caja envolvente.
-  const box = new THREE.Box3().setFromObject(scene);
+  object.traverse((o) => {
+    if (o.isMesh || o.isSkinnedMesh) { o.castShadow = true; o.frustumCulled = false; }
+  });
+
+  // Escalado por la caja envolvente y apoyo en el suelo.
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
   const h = box.max.y - box.min.y;
-  if (h > 0.01) scene.scale.multiplyScalar(targetHeight / h);
+  if (h > 1e-4) object.scale.multiplyScalar(targetHeight / h);
+  object.updateMatrixWorld(true);
+  const box2 = new THREE.Box3().setFromObject(object);
+  object.position.y -= box2.min.y;
+  object.updateMatrixWorld(true);
 
-  const rig = { root, bones, names: Object.keys(bones), object: scene, clips: gltf.animations || [] };
-  computeRestState(rig);
+  const rig = {
+    root: bones.Hips,
+    bones,
+    names: Object.keys(bones),
+    object,
+    clips,
+    boneNames: vistos,
+  };
+
+  orientRig(rig, 0);
+  // Los personajes de Mixamo no siempre miran al mismo lado segun el
+  // exportador; se detecta por los pies, que apuntan hacia delante.
+  const yaw = detectFacing(rig);
+  if (yaw) orientRig(rig, yaw);
   return rig;
+}
+
+/**
+ * Fija el giro base del modelo y recalcula la pose de reposo.
+ *
+ * Es importante hacerlo asi y no rotar el objeto por su cuenta: las poses del
+ * juego estan escritas en los ejes del personaje (+Z hacia el rival), de modo
+ * que el giro tiene que formar parte del estado de reposo. Si solo se rotara
+ * la malla, el luchador miraria bien pero golpearia hacia atras.
+ */
+export function orientRig(rig, yaw) {
+  rig.yaw = yaw;
+  if (rig.object) {
+    rig.object.rotation.y = yaw;
+    rig.object.updateMatrixWorld(true);
+  }
+  // Rotacion acumulada de los nodos que hay por encima de la cadera.
+  const base = new THREE.Quaternion();
+  const chain = [];
+  for (let n = rig.root.parent; n; n = n.parent) {
+    chain.push(n);
+    if (n === rig.object) break;
+  }
+  for (const node of chain.reverse()) base.multiply(node.quaternion);
+  computeRestState(rig, base);
+  return rig;
+}
+
+/** Gira el personaje 180°. */
+export function flipRig(rig) {
+  return orientRig(rig, (rig.yaw || 0) + Math.PI);
+}
+
+/**
+ * ¿Mira el modelo hacia +Z? Se mira la punta del pie respecto al tobillo, que
+ * en cualquier rig en T-pose apunta hacia delante.
+ * @returns {number} 0 si mira bien, Math.PI si esta del reves
+ */
+function detectFacing(rig) {
+  if (rig.object) rig.object.updateMatrixWorld(true);
+  let dz = 0;
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  for (const side of ['Left', 'Right']) {
+    const foot = rig.bones[side + 'Foot'];
+    const toe = rig.bones[side + 'ToeBase'] || rig.bones[side + 'Toe_End'];
+    if (!foot || !toe) continue;
+    foot.getWorldPosition(a);
+    toe.getWorldPosition(b);
+    dz += b.z - a.z;
+  }
+  if (Math.abs(dz) < 1e-4) return 0;   // sin datos: se deja como esta
+  return dz > 0 ? 0 : Math.PI;
 }

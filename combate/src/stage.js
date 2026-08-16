@@ -157,7 +157,11 @@ export class Stage {
     }
     this.camera.lookAt(this.camTarget);
 
-    // Chispas
+    this.updateSparks(dt);
+    this.fill.intensity = 1.2 + Math.sin(performance.now() * 0.002) * 0.25;
+  }
+
+  updateSparks(dt) {
     const arr = this.sparkPts.geometry.attributes.position.array;
     for (let i = 0; i < this.sparks.length; i++) {
       const s = this.sparks[i];
@@ -171,8 +175,20 @@ export class Stage {
       }
     }
     this.sparkPts.geometry.attributes.position.needsUpdate = true;
+  }
 
-    this.fill.intensity = 1.2 + Math.sin(performance.now() * 0.002) * 0.25;
+  /** Camara de escaparate: encuadra a un solo luchador, girando despacio. */
+  focus(dt, fighter) {
+    // Encuadre entero: a 38° de campo y 4.4 m caben los 1.75 m con aire.
+    const t = performance.now() * 0.00018;
+    const want = new THREE.Vector3(
+      fighter.pos.x + Math.sin(t) * 1.9,
+      1.35,
+      4.4 - Math.cos(t) * 0.5);
+    this.camera.position.lerp(want, 1 - Math.exp(-dt * 3));
+    this.camTarget.lerp(new THREE.Vector3(fighter.pos.x, 0.95, 0), 1 - Math.exp(-dt * 4));
+    this.camera.lookAt(this.camTarget);
+    this.updateSparks(dt);
   }
 
   resize(w, h) {

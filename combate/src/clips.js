@@ -71,24 +71,31 @@ export const POSES = {
     Head: [3, 4, 0],
   }),
 
-  // Desplazamiento lateral: dos apoyos alternos
-  stepA: merge(TORSO_STANCE, ARMS_GUARD, {
-    LeftUpLeg: [-30, 4, 6],
-    LeftLeg: [34, 0, 0],
-    LeftFoot: [-6, 0, 0],
-    RightUpLeg: [22, -6, -8],
-    RightLeg: [12, 0, 0],
-    RightFoot: [-8, 0, 0],
+  // Ciclo de marcha completo: contacto izq -> paso der -> contacto der ->
+  // paso izq. La zancada tiene que dar la distancia que recorre el luchador
+  // o los pies patinan (ver WALK_CYCLE_DISTANCE en fighter.js).
+  walkContactL: merge(TORSO_STANCE, ARMS_GUARD, {
     Hips: [0, -22, 0],
+    LeftUpLeg: [-32, 4, 4], LeftLeg: [10, 0, 0], LeftFoot: [-4, 0, 0],
+    RightUpLeg: [22, -6, -6], RightLeg: [24, 0, 0], RightFoot: [-20, 0, 0],
   }),
-  stepB: merge(TORSO_STANCE, ARMS_GUARD, {
-    LeftUpLeg: [-6, 4, 4],
-    LeftLeg: [14, 0, 0],
-    LeftFoot: [-10, 0, 0],
-    RightUpLeg: [2, -6, -6],
-    RightLeg: [34, 0, 0],
-    RightFoot: [-4, 0, 0],
+  // Apoyo izquierdo: sus valores son la media exacta de los dos contactos
+  // (-32/+20, 10/26, -4/-20), de modo que el barrido resulta uniforme.
+  walkPassR: merge(TORSO_STANCE, ARMS_GUARD, {
+    Hips: [1, -22, 0],
+    LeftUpLeg: [-6, 4, 4], LeftLeg: [18, 0, 0], LeftFoot: [-12, 0, 0],
+    RightUpLeg: [-4, -6, -6], RightLeg: [58, 0, 0], RightFoot: [-6, 0, 0],
+  }),
+  walkContactR: merge(TORSO_STANCE, ARMS_GUARD, {
     Hips: [0, -22, 0],
+    LeftUpLeg: [20, 4, 4], LeftLeg: [26, 0, 0], LeftFoot: [-20, 0, 0],
+    RightUpLeg: [-30, -6, -6], RightLeg: [12, 0, 0], RightFoot: [-4, 0, 0],
+  }),
+  // Apoyo derecho, misma idea (-30/+22, 12/24, -4/-20).
+  walkPassL: merge(TORSO_STANCE, ARMS_GUARD, {
+    Hips: [1, -22, 0],
+    LeftUpLeg: [-4, 4, 4], LeftLeg: [56, 0, 0], LeftFoot: [-6, 0, 0],
+    RightUpLeg: [-4, -6, -6], RightLeg: [18, 0, 0], RightFoot: [-12, 0, 0],
   }),
 
   crouch: merge(TORSO_STANCE, ARMS_GUARD, {
@@ -357,10 +364,11 @@ export function compiledPose(name) {
 
 // --- Clips -----------------------------------------------------------------
 
-const clip = (name, loop, keys) => ({
+const clip = (name, loop, keys, opts = {}) => ({
   name, loop,
   keys,
   duration: keys[keys.length - 1].t,
+  ease: opts.ease !== false,
 });
 
 export const CLIPS = {
@@ -370,12 +378,12 @@ export const CLIPS = {
     { t: 1.40, pose: 'stance' },
   ]),
   walk: clip('walk', true, [
-    { t: 0.00, pose: 'stance' },
-    { t: 0.18, pose: 'stepA' },
-    { t: 0.36, pose: 'stance' },
-    { t: 0.54, pose: 'stepB' },
-    { t: 0.72, pose: 'stance' },
-  ]),
+    { t: 0.00, pose: 'walkContactL' },
+    { t: 0.18, pose: 'walkPassR' },
+    { t: 0.36, pose: 'walkContactR' },
+    { t: 0.54, pose: 'walkPassL' },
+    { t: 0.72, pose: 'walkContactL' },
+  ], { ease: false }),
   crouch: clip('crouch', true, [
     { t: 0.00, pose: 'crouch' },
     { t: 0.60, pose: 'crouch' },

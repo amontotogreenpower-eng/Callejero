@@ -13,11 +13,12 @@ combate/
 ├── index.html          página, importmap y menú
 ├── styles.css
 ├── src/
-│   ├── rig.js          esqueleto Mixamo + muñeco + carga de GLB
+│   ├── rig.js          esqueleto Mixamo + muñeco + carga de FBX/GLB
 │   ├── clips.js        poses y clips de animación
 │   ├── animator.js     reproductor con fundido cruzado
 │   ├── moves.js        frame data de los golpes
 │   ├── fighter.js      física, máquina de estados y cajas de golpeo
+│   ├── footlock.js     fijado del pie de apoyo con IK (evita el patinaje)
 │   ├── combat.js       detección de impactos
 │   ├── ai.js           oponente de la máquina
 │   ├── mocap.js        MediaPipe Pose Landmarker
@@ -123,21 +124,47 @@ La pose capturada se mezcla con la animación del juego: mientras te mueves
 libremente manda tu cuerpo; cuando se dispara un golpe, manda el clip para
 que la acción se lea con claridad y las hitboxes sean justas.
 
-## Usar personajes y animaciones de Mixamo
+## Vista previa
+
+En el menú hay dos botones para ver las cosas antes de pelear:
+
+- **Ver el personaje** — muestra al luchador solo, con la cámara girando a su
+  alrededor. Es lo que se abre automáticamente al cargar un personaje propio.
+- **Probar cámara sin pelear** — arranca la captura y el luchador copia tus
+  movimientos, con la vista previa de la webcam y el gesto detectado en el
+  panel de la esquina. Sirve para colocarte y calibrar sin prisa.
+
+Si la cámara no arranca, lo dice con el motivo concreto y el juego sigue
+funcionando con teclado.
+
+## Usar personajes de Mixamo
 
 El juego trae un muñeco construido por código, así que no necesita descargar
 nada. Si quieres tu propio personaje:
 
-1. Descárgalo de [mixamo.com](https://www.mixamo.com) en **formato glTF
-   (.glb), "With Skin"**.
+1. Descárgalo de [mixamo.com](https://www.mixamo.com) en **FBX**, con skin y
+   sin animación (Mixamo no ofrece glTF; también vale un `.glb` o `.gltf` si
+   ya lo has convertido con Blender u otra herramienta).
 2. En el menú, dentro de *Controles y gestos*, cárgalo con el selector de
-   fichero. Sustituye al luchador 1.
-3. Si aparece de espaldas, pulsa **Girar 180°**.
+   fichero. Sustituye al luchador 1 y se abre la vista previa.
+3. Si aparece de espaldas, pulsa **Girar 180°** (normalmente se detecta solo).
 
-Funciona porque todo el sistema habla en nombres de hueso Mixamo, y tanto las
-poses como el retargeting se traducen al espacio de cada hueso
-(`offsetLocal = restWorld⁻¹ · q · restWorld`), de modo que sirven igual para
-el muñeco procedural que para un rig importado con sus propias orientaciones.
+Tres cosas hacen que esto funcione con ficheros que vienen de sitios
+distintos:
+
+- **Los nombres se normalizan.** El mismo esqueleto llega escrito de muchas
+  formas: `mixamorig:LeftArm` en el FBX original, `mixamorig_LeftArm` cuando
+  pasa por glTF (los dos puntos no son válidos ahí), `mixamorig1:LeftArm` en
+  una segunda descarga, o `Armature|mixamorig:Hips`. Todas se reducen al mismo
+  nombre canónico.
+- **Las poses se traducen al espacio de cada hueso**
+  (`offsetLocal = restWorld⁻¹ · q · restWorld`), así que sirven igual para el
+  muñeco procedural, cuyos huesos están alineados con los ejes del mundo, que
+  para un rig de Mixamo real, donde cada hueso tiene su propia orientación.
+- **La orientación se detecta por los pies.** Muchos modelos vienen mirando
+  hacia atrás; el giro se aplica al estado de reposo, no solo a la malla. Si
+  se rotara solo la malla, el personaje miraría bien pero golpearía hacia
+  atrás.
 
 ## Ajustes rápidos
 
@@ -162,13 +189,40 @@ npm test
 - `tests/animacion.test.mjs` — esqueleto, clips, **alcance real de cada golpe
   en el instante del impacto**, retargeting con landmarks sintéticos y
   reconocimiento de gestos.
-- `tests/combate.test.mjs` — 12 rondas de IA contra IA más las reglas de daño
+- `tests/combate.test.mjs` — 12 rondas de IA contra IA, las reglas de daño
   (bloqueo, esquiva agachado, patada baja que atraviesa la guardia alta,
-  aturdimiento, KO, empuje, límites del escenario).
+  aturdimiento, KO, empuje, límites del escenario) y el **arrastre del pie de
+  apoyo al caminar**.
 
-La comprobación de alcance es la que evita una trampa nada evidente: los
-giros del torso **se acumulan** sobre los brazos, así que un ángulo escrito
-pensando en ejes de mundo puede acabar mandando el puño al lado contrario.
+Dos comprobaciones cubren trampas que no se ven leyendo el código:
+
+- **Alcance de los golpes.** Los giros del torso *se acumulan* sobre los
+  brazos, así que un ángulo escrito pensando en ejes de mundo puede acabar
+  mandando el puño al lado contrario.
+- **Arrastre del pie.** En una marcha correcta siempre hay un pie casi quieto
+  respecto al suelo. La prueba mide, fotograma a fotograma, el menor de los
+  dos desplazamientos: con el cuerpo a 2,5 m/s el pie apoyado se mueve a
+  0,09 m/s.
+
+## Por qué los pies no patinan
+
+Que la animación de andar no resbale no sale gratis; aquí hay tres piezas:
+
+1. **La zancada da la distancia real.** El ciclo de marcha recorre 1,48 m,
+   medido sobre la propia animación.
+2. **La reproducción va al ritmo del avance.** La velocidad del clip se
+   calcula a partir de la velocidad del luchador, y al retroceder el ciclo se
+   reproduce hacia atrás.
+3. **El pie de apoyo se clava al suelo** (`footlock.js`). Aun encajando la
+   zancada, la pierna describe un arco y el tobillo nunca avanza justo a la
+   velocidad del cuerpo. Mientras un pie está apoyado se fija su posición en
+   el mundo y la pierna se resuelve con IK de dos huesos, doblando la rodilla
+   en el mismo plano en el que ya estaba. Las longitudes se miden en cada
+   fotograma sobre las posiciones reales, así que funciona con cualquier
+   escala de modelo importado.
+
+La marcha usa además interpolación lineal en vez de suavizada: el pie apoyado
+tiene que barrer hacia atrás a velocidad constante.
 
 ## Limitaciones conocidas
 
@@ -179,3 +233,5 @@ pensando en ejes de mundo puede acabar mandando el puño al lado contrario.
   teclado.
 - La captura pide una webcam y descarga el modelo de MediaPipe la primera
   vez; sin eso el juego arranca igual en modo teclado.
+- Mientras la captura está activa el fijado de pies se desactiva: manda tu
+  cuerpo, no la animación.

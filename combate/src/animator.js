@@ -15,9 +15,16 @@ class Track {
   advance(dt) {
     if (!this.clip) return;
     this.time += dt * this.speed;
-    if (this.time >= this.clip.duration) {
-      if (this.clip.loop) this.time %= this.clip.duration;
-      else { this.time = this.clip.duration; this.done = true; }
+    const d = this.clip.duration;
+    if (this.clip.loop) {
+      // Modulo con signo: los clips tambien se reproducen hacia atras
+      // (caminar de espaldas), y un tiempo negativo dejaria la pose clavada.
+      this.time = ((this.time % d) + d) % d;
+    } else if (this.time >= d) {
+      this.time = d;
+      this.done = true;
+    } else if (this.time < 0) {
+      this.time = 0;
     }
   }
 }
@@ -32,8 +39,10 @@ function sample(clip, time, out) {
   const b = keys[Math.min(i + 1, keys.length - 1)];
   const span = b.t - a.t;
   const u = span > 1e-6 ? THREE.MathUtils.clamp((time - a.t) / span, 0, 1) : 0;
-  // Suavizado tipo ease-in-out: evita el aspecto lineal de los keyframes.
-  const k = u * u * (3 - 2 * u);
+  // Suavizado tipo ease-in-out, que da mejor aspecto a los golpes. La marcha
+  // lo desactiva (ease: false): el pie apoyado tiene que barrer hacia atras a
+  // velocidad constante o el luchador patina.
+  const k = clip.ease === false ? u : u * u * (3 - 2 * u);
 
   const pa = compiledPose(a.pose);
   const pb = compiledPose(b.pose);

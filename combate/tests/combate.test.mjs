@@ -81,6 +81,42 @@ ok(stats.kos >= 9, 'casi todas las rondas terminan en KO', `${stats.kos}/12`);
 ok(stats.moves.size >= 5, 'se usa todo el repertorio', String(stats.moves.size));
 ok(stats.maxCombo >= 2, 'se encadenan combos', String(stats.maxCombo));
 
+// ------------------------------------------------------------ marcha
+console.log('\n== marcha ==');
+// En una marcha correcta siempre hay un pie practicamente quieto respecto al
+// suelo. Si la zancada no encaja con el avance, los dos pies se arrastran.
+function deslizamiento(dirX) {
+  const w = new Fighter(scene, { name: 'W', palette: paleta });
+  // Se arranca en un extremo para que no tope con el borde del escenario
+  // durante la medida (topar frenaria el cuerpo y falsearia el resultado).
+  w.reset(dirX > 0 ? -5 : 5, 1);
+  const cmd = { moveX: dirX, crouch: false, jump: false, block: false, attack: null };
+  for (let i = 0; i < 40; i++) w.update(dt, cmd, null);
+  const v = [];
+  let pL = null, pR = null;
+  let recorrido = 0;
+  const x0 = w.pos.x;
+  const N = 120;
+  for (let i = 0; i < N; i++) {
+    w.update(dt, cmd, null);
+    const L = w.rig.bones.LeftFoot.getWorldPosition(new THREE.Vector3()).x;
+    const R = w.rig.bones.RightFoot.getWorldPosition(new THREE.Vector3()).x;
+    if (pL !== null) v.push(Math.min(Math.abs(L - pL), Math.abs(R - pR)) / dt);
+    pL = L; pR = R;
+  }
+  recorrido = Math.abs(w.pos.x - x0);
+  v.sort((a, b) => a - b);
+  return { mediana: v[v.length >> 1], velocidadCuerpo: recorrido / (N * dt) };
+}
+const adelante = deslizamiento(1);
+const atras = deslizamiento(-1);
+console.log(`  arrastre del pie apoyado: adelante ${adelante.mediana.toFixed(2)} m/s, ` +
+  `atras ${atras.mediana.toFixed(2)} m/s (el cuerpo va a ${adelante.velocidadCuerpo.toFixed(2)})`);
+ok(adelante.mediana < adelante.velocidadCuerpo * 0.25,
+  'andando hacia delante el pie de apoyo no patina', adelante.mediana.toFixed(2) + ' m/s');
+ok(atras.mediana < atras.velocidadCuerpo * 0.25,
+  'andando hacia atras tampoco', atras.mediana.toFixed(2) + ' m/s');
+
 // ------------------------------------------------------------ reglas
 console.log('\n== reglas de daño ==');
 

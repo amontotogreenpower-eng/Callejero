@@ -4,14 +4,23 @@ import * as THREE from 'three';
 import { buildSkeleton, computeRestState, buildMannequin } from './rig.js';
 import { Animator } from './animator.js';
 import { MOVES } from './moves.js';
+import { CLIPS } from './clips.js';
+import { FootLock } from './footlock.js';
 
 export const ARENA_X = 5.4;      // limite lateral del escenario
 export const PUSH_RADIUS = 0.52; // radio del "pushbox"
 const GRAVITY = 22;
 const JUMP_VEL = 6.6;
-const WALK_FWD = 2.7;
-const WALK_BACK = 2.1;
+const WALK_FWD = 2.5;
+const WALK_BACK = 2.0;
 const GROUND_FRICTION = 9;  // frenado del retroceso en el suelo (1/s)
+
+// Distancia que recorren los pies en un ciclo del clip `walk`, medida sobre la
+// propia animacion (tests/animacion.test.mjs la comprueba). Con ella se ajusta
+// la velocidad de reproduccion al avance real: si no coinciden, el luchador
+// camina patinando.
+export const WALK_CYCLE_DISTANCE = 1.48;
+const WALK_NATURAL_SPEED = WALK_CYCLE_DISTANCE / CLIPS.walk.duration;
 
 const _v = new THREE.Vector3();
 
@@ -72,6 +81,7 @@ export class Fighter {
     // aplicar la animacion; debe escribir cuaterniones en los huesos.
     this.poseSource = null;
     this.mocapActive = false;
+    this.footLock = new FootLock();
 
     this.onEvent = () => {};
   }
@@ -87,6 +97,7 @@ export class Fighter {
     this.stun = 0; this.combo = 0; this.comboTimer = 0; this.chainFrom = null;
     this.blocking = false; this.crouching = false; this.hitFlash = 0;
     this.animator.play('idle', { fade: 0 });
+    this.footLock.reset();
     this.syncTransform();
   }
 
@@ -215,10 +226,16 @@ export class Fighter {
       this.applyPhysics(dt, 0);
     } else if (Math.abs(c.moveX) > 0.15) {
       this.state = 'walk';
-      const forward = Math.sign(c.moveX) === this.facing;
+      const dir = Math.sign(c.moveX);
+      const forward = dir === this.facing;
       const spd = forward ? WALK_FWD : WALK_BACK;
-      this.animator.play('walk', { fade: 0.12, speed: forward ? 1.15 : -1.0 });
-      this.applyPhysics(dt, Math.sign(c.moveX) * spd);
+      // La zancada se reproduce a la velocidad a la que se avanza de verdad,
+      // y al retroceder el ciclo va hacia atras.
+      this.animator.play('walk', {
+        fade: 0.12,
+        speed: dir * this.facing * spd / WALK_NATURAL_SPEED,
+      });
+      this.applyPhysics(dt, dir * spd);
     } else {
       this.state = 'idle';
       this.animator.play('idle', { fade: 0.15 });
@@ -272,6 +289,9 @@ export class Fighter {
     }
     this.animator.applyTo(weight);
     this.syncTransform();
+    // El pie de apoyo se clava al suelo mientras se camina: sin esto la
+    // zancada resbala por mucho que encaje la distancia del ciclo.
+    this.footLock.update(this, dt, this.state === 'walk' && !this.mocapActive);
   }
 
   syncTransform() {
